@@ -1,0 +1,31 @@
+# /etc/pacman.d/hooks/uki-remove.hook
+# kate: space-indent on; indent-width 4; syntax ini files;
+
+# ------------------------------------------------------------------------------
+#                                                                              -
+#  UKI Manager Remove Hook                                                     -
+#                                                                              -
+#  Hook to trigger UKI Manager before mkinitcpio and/or kernel packages        -
+#  are removed.                                                                -
+#                                                                              -
+#  Created by Fonic <https://github.com/fonic>                                 -
+#  Date: 04/19/23 - 07/20/25                                                   -
+#                                                                              -
+#  Based on:                                                                   -
+#  https://man.archlinux.org/man/alpm-hooks.5                                  -
+#  https://forum.manjaro.org/t/creating-useful-pacman-hooks/55020              -
+#  /usr/share/libalpm/hooks/60-mkinitcpio-remove.hook                          -
+#                                                                              -
+# ------------------------------------------------------------------------------
+
+[Trigger]
+Operation = Remove
+Type = Path
+Target = usr/lib/modules/*/vmlinuz
+Target = usr/lib/initcpio/*
+
+[Action]
+Description = UKI Manager Remove Hook
+When = PreTransaction
+Exec = /etc/pacman.d/hooks.bin/uki-manager.sh remove
+NeedsTargets

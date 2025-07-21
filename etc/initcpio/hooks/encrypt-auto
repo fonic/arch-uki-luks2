@@ -1,0 +1,244 @@
+#!/usr/bin/ash
+# /etc/initcpio/hooks/encrypt-auto
+# kate: space-indent on; indent-width 4; syntax bash;
+
+# ------------------------------------------------------------------------------
+#                                                                              -
+#  Created by Fonic <https://github.com/fonic>                                 -
+#  Date: 04/16/23 - 07/20/25                                                   -
+#                                                                              -
+#  Based on:                                                                   -
+#  /usr/lib/initcpio/hooks/encrypt (stock LUKS hook)                           -
+#  /usr/lib/initcpio/init_functions (functions available at run-time)          -
+#                                                                              -
+# ------------------------------------------------------------------------------
+
+run_hook() {
+
+    # --------------------------------------
+    #  Globals                             -
+    # --------------------------------------
+
+    local CS_ARGS=""                            # Additional arguments/options passed to 'cryptsetup'
+    local UNLOCK_TRIES=3                        # Number of tries for user to enter correct passphrase
+    local PROMPT_USEGUI="true"                  # Use GUI to prompt user for passphrase? (via plymouth; 'true'/'false')
+    local PROMPT_GUITXT="Enter passphrase"      # Passphrase prompt text for GUI
+    local PROMPT_CONTXT="Enter passphrase: "    # Passphrase prompt text for console
+    local PROMPT_CONTMO=60                      # Passphrase prompt timeout for console (in seconds)
+    local PROMPT_CONERS="false"                 # Erase passphrase prompt from console after input? ('true'/'false')
+    local DMDEV_NAME="luks-%s"                  # Device mapper device name template (%s -> UUID -or- file system label)
+    local DMDEV_BASEDIR="/dev/mapper"           # Base directory for device mapper devices
+    local RENAME_MAPPINGS="true"                # Rename LUKS mappings (replaces UUIDs with fs labels; 'true'/'false')
+
+    local DEBUG_WAIT="false"                    # Wait for user confirmation when hook ends (for debug; 'true'/'false')
+
+
+    # --------------------------------------
+    #  Functions                           -
+    # --------------------------------------
+
+    warn() {
+        echo "WARNING: $*"
+    }
+
+    debug_wait() {
+        read -s -p "*** End of hook. Hit ENTER to continue. ***"
+        echo
+    }
+
+
+    # --------------------------------------
+    #  Main                                -
+    # --------------------------------------
+
+    # Copied from stock 'encrypt' hook
+    modprobe -a -q dm-crypt >/dev/null 2>&1
+
+
+    # Check if there are ANY LUKS volumes present; exit right away if there
+    # are none, as there is no reason to continue (shortcut)
+    msg "Checking for LUKS volumes..."
+    if ! blkid | grep -qF "TYPE=\"crypto_LUKS\""; then
+        warn "No LUKS volumes found, nothing to do" >&2
+        ${DEBUG_WAIT} && debug_wait
+        return 0
+    fi
+    msg "LUKS volumes found."
+
+
+    # Process user-defined additional options for cryptsetup (specified via
+    # kernel command line, i.e. 'encrypt_auto=opt1,opt2,...'; 'encrypt_auto'
+    # has already been set as a variable at this point by 'parse_cmdline()'
+    # in 'init_functions'; copied from stock hooks for compatibility)
+    #set -f; local OLDIFS="${IFS}" IFS=, opt
+    #for opt in ${encrypt_auto}; do
+    local opt
+    for opt in ${encrypt_auto//,/ }; do
+        case "${opt}" in
+            allow-discards|discard)
+                CS_ARGS="${CS_ARGS}${CS_ARGS:+ }--allow-discards"
+                ;;
+            no-read-workqueue|perf-no_read_workqueue)
+                CS_ARGS="${CS_ARGS}${CS_ARGS:+ }--perf-no_read_workqueue"
+                ;;
+            no-write-workqueue|perf-no_write_workqueue)
+                CS_ARGS="${CS_ARGS}${CS_ARGS:+ }--perf-no_write_workqueue"
+                ;;
+            *)
+                warn "Unknown encryption option '${opt}', ignoring option" >&2
+                ;;
+        esac
+    done
+    #set +f; IFS="${OLDIFS}"; unset OLDIFS
+
+
+    # Define local variables (for LUKS volumes unlock)
+    local try result input pids tasks skipped line device uuid dmdev success failure pid
+
+    # Unlock loop: try to unlock LUKS volumes until successful (i.e. at least
+    # ONE volume was unlocked) -or- until out of (re-)tries; assume FAILURE as
+    # there is no guarantee that loop runs at all (depending on UNLOCK_TRIES)
+    try=0; result=1
+    while try=$((try + 1 )) && [ ${try} -le ${UNLOCK_TRIES} ]; do
+
+        # Prompt user for passphrase
+        if ${PROMPT_USEGUI} && command -v plymouth >/dev/null; then
+            # Prompt on GUI via plymouth (NOTE: when 'splash' is absent from
+            # kernel command line or when user switches from GUI to textmode
+            # by hitting ESC, plymouth will prompt for password on console;
+            # also, plymouth will echo an empty line on the console by itself
+            # before displaying its prompt; thus, this works for both console
+            # and GUI; the read-based approach below is for environments that
+            # completely lack plymouth)
+            input="$(plymouth ask-for-password --prompt="${PROMPT_GUITXT}" --dont-pause-progress)"
+        else
+            # Prompt on console, erase prompt afterwards (CAUTION: if plymouth
+            # is running in the background, which might be the case even if
+            # 'splash' is NOT present on kernel command line, IT HAS TO BE
+            # SHUT DOWN NOW, as plymouth and read will otherwise clash over
+            # input control, resulting in input being only partially recog-
+            # nized by read or not at all)
+            #if command -v plymouth >/dev/null; then
+            if pidof -q plymouthd; then
+                msg "Stopping plymouth daemon..."
+                plymouth quit && msg "Plymouth daemon stopped." || err "Failed to stop plymouth daemon" >&2
+            fi
+            echo; read -s -p "${PROMPT_CONTXT}" -t ${PROMPT_CONTMO} input
+            ${PROMPT_CONERS} && echo -en "\r\e[K" || echo
+        fi
+        msg ""
+
+        # Unlock LUKS volumes (in parallel using background tasks)
+        msg "Unlocking LUKS volumes..."
+        pids=""; tasks=0; skipped=0
+        while read -r line && tasks=$((tasks + 1)); do              # e.g. '/dev/nvme1n2p3: UUID="<uuid>" TYPE="crypto_LUKS" PARTUUID="<part-uuid>"'
+            device="${line%%:*}"                                    # extract part from start to first ':'
+            [ "${device}" == "${line}" ] && device=""               # if true, line does NOT contain a ':' -> zap device variable
+
+            uuid="${line#* UUID=\"}"                                # extract part between ' UUID="' ...
+            [ "${uuid}" == "${line}" ] && uuid=""                   # if true, line does NOT contain a UUID -> zap uuid variable
+            uuid="${uuid%%\"*}"                                     # ... and next '"'
+
+            dmdev="${DMDEV_NAME/"%s"/"${uuid}"}"                    # <uuid> -> 'luks-<uuid>'
+
+            if [ -z "${device}" ] || [ -z "${uuid}" ] || [ -z "${dmdev}" ]; then  # sanity check before issuing unlock command (triggered by zaps above)
+                err "Failed to extract required data from blkid line, skipping device" >&2
+                err "device: '${device}', uuid: '${uuid}', dmdev: '${dmdev}', blkid line: '${line}'" >&2
+                skipped=$((skipped + 1))
+                continue
+            fi
+
+            msg "Unlocking device '${device}' as '${dmdev}'..."     # issue command to unlock device (background)
+            (echo "${input}" | cryptsetup open --type luks ${CS_ARGS} -- "${device}" "${dmdev}") &>/dev/null &
+            pids="${pids}${pids:+ }$!"
+        done < <(blkid | grep -F "TYPE=\"crypto_LUKS\"" | sort)
+
+        # Erase input
+        input="$(local i=0; while i=$((i + 1)) && [ $i -le ${#input} ]; do echo -n '*'; done)"
+
+        # Wait for unlock tasks to finish
+        #msg "Waiting for unlock tasks to finish..."
+        wait ${pids}
+
+        # Evaluate unlock tasks results
+        #msg "Evaluating unlock tasks results..."
+        success=0; failure=0
+        for pid in ${pids}; do
+            wait ${pid} && success=$((success + 1)) || failure=$((failure + 1))
+        done
+        if [ ${success} -eq 0 ]; then
+            err "Failed to unlock LUKS volumes" >&2
+            result=1
+            continue
+        elif [ ${success} -lt ${tasks} ]; then
+            warn "Failed to unlock some LUKS volumes (success: ${success}, failure: ${failure}, skipped: ${skipped}, total: ${tasks})" >&2
+            result=0
+            break
+        else
+            msg "Successfully unlocked LUKS volumes."
+            result=0
+            break
+        fi
+
+    done
+    msg ""
+
+    # If no LUKS volumes were unlocked -or- renaming of LUKS mappings
+    # is disabled, exit hook and return result right here (shortcut)
+    if [ ${result} -eq 1 ] || ! ${RENAME_MAPPINGS}; then
+        ${DEBUG_WAIT} && debug_wait
+        return ${result}
+    fi
+
+
+    # Define local variables (for LUKS mappings renaming)
+    local tasks skipped success failure device line label dmsrc dmdst result
+
+    # Rename LUKS mappings (replaces UUIDs with fs labels)
+    msg "Renaming LUKS mappings..."
+    tasks=0; skipped=0; success=0; failure=0
+    while read -r device && tasks=$((tasks + 1)); do
+        line="$(blkid -- "${device}")"                              # e.g. '/dev/mapper/luks-<uuid>: LABEL="root" UUID="<uuid>" BLOCK_SIZE="4096" TYPE="ext4"'
+
+        label="${line#* LABEL=\"}"                                  # extract part between ' LABEL="' ...
+        if [ "${label}" == "${line}" ]; then                        # if true, line does NOT contain an fs label (may happen, not an error)
+            warn "Device does not seem to have a file system label, skipping device" >&2
+            warn "device: '${device}', blkid line: '${line}'" >&2
+            skipped=$((skipped + 1))
+            continue
+        fi
+        label="${label%%\"*}"                                       # ... and next '"' (TODO: can fs labels contain '"'? -> would be problematic!)
+
+        dmsrc="$(basename -- "${device}")"
+        dmdst="${DMDEV_NAME/"%s"/"${label}"}"
+
+        if [ -z "${device}" ] || [ -z "${label}" ] || [ -z "${dmsrc}" ] || [ -z "${dmdst}" ]; then  # sanity check before issuing rename command
+            err "Failed to gather data required for renaming, skipping device" >&2
+            err "device: '${device}', label: '${label}', dmsrc: '${dmsrc}', dmdst: '${dmdst}', blkid line: '${line}'" >&2
+            skipped=$((skipped + 1))
+            continue
+        fi
+
+        msg "Renaming mapping '${dmsrc}' to '${dmdst}'..."          # issue command to unlock mapping
+        dmsetup rename "${dmsrc}" "${dmdst}" && success=$((success + 1)) || failure=$((failure + 1))
+    done < <(find "${DMDEV_BASEDIR}" \( -type b -or -type l \) -name "${DMDEV_NAME/"%s"/"*"}" -print | sort)
+    #        ^ alternatively, 'dmsetup ls' could be used, which yields a list
+    #          of device mapper names (i.e. without leading '/dev/mapper/')
+
+    # Evaluate renaming results
+    if [ ${success} -eq 0 ]; then
+        err "Failed to rename LUKS mappings" >&2
+        result=1
+    elif [ ${success} -lt ${tasks} ]; then
+        warn "Failed to rename some LUKS mappings (success: ${success}, failure: ${failure}, skipped: ${skipped}, total: ${tasks})" >&2
+        result=0
+    else
+        msg "Successfully renamed LUKS mappings."
+        result=0
+    fi
+    msg ""
+
+    # Exit hook and return result
+    ${DEBUG_WAIT} && debug_wait
+    return ${result}
+}

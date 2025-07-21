@@ -1,0 +1,32 @@
+# /etc/pacman.d/hooks/uki-install.hook
+# kate: space-indent on; indent-width 4; syntax ini files;
+
+# ------------------------------------------------------------------------------
+#                                                                              -
+#  UKI Manager Install Hook                                                    -
+#                                                                              -
+#  Hook to trigger UKI Manager after mkinitcpio and/or kernel packages         -
+#  have been installed or upgraded.                                            -
+#                                                                              -
+#  Created by Fonic <https://github.com/fonic>                                 -
+#  Date: 04/19/23 - 07/20/25                                                   -
+#                                                                              -
+#  Based on:                                                                   -
+#  https://man.archlinux.org/man/alpm-hooks.5                                  -
+#  https://forum.manjaro.org/t/creating-useful-pacman-hooks/55020              -
+#  /usr/share/libalpm/hooks/90-mkinitcpio-install.hook                         -
+#                                                                              -
+# ------------------------------------------------------------------------------
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Path
+Target = usr/lib/modules/*/vmlinuz
+Target = usr/lib/initcpio/*
+
+[Action]
+Description = UKI Manager Install Hook
+When = PostTransaction
+Exec = /etc/pacman.d/hooks.bin/uki-manager.sh install
+NeedsTargets

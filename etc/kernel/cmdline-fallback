@@ -1,0 +1,1 @@
+root=/dev/mapper/luks-root resume=/dev/mapper/luks-swap udev.log_priority=3 systemd.unit=emergency.target ro
