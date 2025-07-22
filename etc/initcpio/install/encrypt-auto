@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # /etc/initcpio/install/encrypt-auto
-# kate: space-indent on; indent-width 4; syntax bash;
 
 # ------------------------------------------------------------------------------
 #                                                                              -

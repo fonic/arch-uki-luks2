@@ -1,6 +1,5 @@
 #!/usr/bin/ash
 # /etc/initcpio/hooks/encrypt-auto
-# kate: space-indent on; indent-width 4; syntax bash;
 
 # ------------------------------------------------------------------------------
 #                                                                              -

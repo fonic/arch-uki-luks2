@@ -46,19 +46,24 @@ root + swap + home).
 **Pros UKI vs. GRUB:**<br/>
 - [X] Unlocking LUKS2 volumes is supported without patching GRUB (or any other
       components)
-- [X] No GRUB, i.e. one less component that could have bugs or vulnerabilities
-- [X] Integrates well with _Secure Boot_ (UKIs get signed automatically by `sbctl`)
+- [X] No GRUB, i.e. one less component to worry about (which might have bugs or
+      expose vulnerabilities)
+- [X] Integrates perfectly with _Secure Boot_ (UKIs get signed automatically by
+      `sbctl`)
+- [X] Well-suited if there is only one OS installed that needs to be booted
 
 **Cons UKI vs. GRUB:**<br/>
-- [ ] Kernel command line cannot be changed on demand (e.g. when boot fails after
-      system upgrade) **(\*)**
+- [ ] Kernel command line cannot be changed on demand (e.g. to fix boot issues
+      after system upgrades) **(\*)**
 - [ ] Requires a larger ESP as UKIs can get quite large (depending on included
       files/modules)
 - [ ] Some UEFIs have trouble maintaining their boot order when entries are
-      added/removed
-- [ ] No fancy boot selection menu (unless the machine's UEFI provides one)
+      added/removed (e.g. due to kernel upgrades)
+- [ ] No fancy boot selection menu (unless the machine's UEFI itself provides
+      one)
 
-**(\*)** The _fallback_ UKI provides a configurable recovery option, though.
+**(\*)** The _fallback_ UKI provides a pre-configurable recovery option for
+this scenario, though.
 
 
 ## Installation
@@ -187,4 +192,4 @@ root + swap + home).
 
 ##
 
-_Last updated: 07/20/25_
+_Last updated: 07/22/25_

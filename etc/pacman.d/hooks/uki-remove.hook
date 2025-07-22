@@ -1,5 +1,4 @@
 # /etc/pacman.d/hooks/uki-remove.hook
-# kate: space-indent on; indent-width 4; syntax ini files;
 
 # ------------------------------------------------------------------------------
 #                                                                              -

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # /etc/pacman.d/hooks.bin/uki-manager.sh
-# kate: space-indent on; indent-width 4; syntax bash;
 
 # ------------------------------------------------------------------------------
 #                                                                              -
