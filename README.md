@@ -49,8 +49,8 @@ root + swap + home).
 - [X] No GRUB, i.e. one less component to worry about (which might have bugs or
       expose vulnerabilities)
 - [X] Integrates perfectly with _Secure Boot_ (UKIs get signed automatically by
-      `sbctl`)
-- [X] Well-suited if there is only one OS installed that needs to be booted
+      `sbctl` hooks without requiring any additional configuration)
+- [X] Well-suited if there is only a single OS installed that needs to be booted
 
 **Cons UKI vs. GRUB:**<br/>
 - [ ] Kernel command line cannot be changed on demand (e.g. to fix boot issues
@@ -71,11 +71,15 @@ this scenario, though.
 1. Prepare a dm-crypt/LUKS2 encrypted disk containing Arch Linux / Manjaro:<br/>
    **Not covered here as detailed guides on that topic are widely available
    (e.g. see [Arch Linux Wiki](https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system)).**
-   The easiest approach might be to use a _second_ device: erase, partition,
-   encrypt, unlock, create file systems, mount file systems, than migrate OS
-   installation from unencrypted first device to encrypted second device.
+   
+   **The easiest approach might be to use _two_ separate devices:**<br/>
+   Perform a normal (unencrypted) installation to the first device, then
+   prepare the second encrypted device manually (erase, partition, encrypt,
+   unlock, create file systems, mount file systems), then migrate all OS
+   data from the first device to the newly set-up encrypted device (e.g.
+   using `rsync`).
 
-   The fully set-up disk might look like this:
+   The fully set-up encrypted disk might look like this:
 
    ```
    # fdisk -l /dev/nvme0n1
@@ -106,7 +110,9 @@ this scenario, though.
 
    **NOTE:** UKIs can get quite large (depending on included files/modules),
              thus the ESP should be **1G** or more in size (especially when
-             multiple kernels are installed at the same time)
+             multiple kernels are installed at the same time)<br/>
+   **NOTE:** make sure to assign file system labels if you want the mkinitcpio
+             hook (`encrypt-auto`) to rename device mapper nodes (optional)
 
 2. Download and extract a [release](https://github.com/fonic/arch-uki-luks2/releases)
    of this project:<br/>
@@ -192,4 +198,4 @@ this scenario, though.
 
 ##
 
-_Last updated: 07/22/25_
+_Last updated: 07/25/25_

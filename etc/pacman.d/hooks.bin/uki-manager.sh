@@ -10,7 +10,7 @@
 #  man.d/hooks/uki-*.hook' (works for pamac, pacman and GUI manager)           -
 #                                                                              -
 #  Created by Fonic <https://github.com/fonic>                                 -
-#  Date: 04/19/23 - 07/20/25                                                   -
+#  Date: 04/19/23 - 07/25/25                                                   -
 #                                                                              -
 #  Based on:                                                                   -
 #  /usr/share/libalpm/scripts/mkinitcpio                                       -
@@ -158,8 +158,7 @@ if [[ "${action}" == "install" ]]; then
 
     # For each kernel package that is being installed/upgraded:
     # Modify mkinitcpio preset file to generate UKI files, (re-)build UKI files
-    # (via mkinitcpio), sign UKI files for Secure Boot, create UEFI boot manager
-    # entries
+    # (via mkinitcpio), create UEFI boot manager entries
     for kernel_trigger in "${kernel_triggers[@]}"; do
         kernel_dir="${kernel_trigger%/vmlinuz}" # e.g. '/usr/lib/modules/6.1.25'
         kernel_name="${kernel_dir##*/}" # e.g. '6.1.25'
