@@ -4,11 +4,11 @@
 # ------------------------------------------------------------------------------
 #                                                                              -
 #  Created by Fonic <https://github.com/fonic>                                 -
-#  Date: 04/16/23 - 07/20/25                                                   -
+#  Date: 04/16/23 - 07/26/25                                                   -
 #                                                                              -
 #  Based on:                                                                   -
-#  /usr/lib/initcpio/hooks/encrypt (stock LUKS hook)                           -
-#  /usr/lib/initcpio/init_functions (functions available at run-time)          -
+#  /usr/lib/initcpio/hooks/encrypt (stock dm-crypt/LUKS hook)                  -
+#  /usr/lib/initcpio/init_functions (functions available at runtime)           -
 #                                                                              -
 # ------------------------------------------------------------------------------
 
@@ -68,7 +68,7 @@ run_hook() {
     # Process user-defined additional options for cryptsetup (specified via
     # kernel command line, i.e. 'encrypt_auto=opt1,opt2,...'; 'encrypt_auto'
     # has already been set as a variable at this point by 'parse_cmdline()'
-    # in 'init_functions'; copied from stock hooks for compatibility)
+    # in 'init_functions'; copied from stock hook for compatibility)
     #set -f; local OLDIFS="${IFS}" IFS=, opt
     #for opt in ${encrypt_auto}; do
     local opt
@@ -206,7 +206,7 @@ run_hook() {
             skipped=$((skipped + 1))
             continue
         fi
-        label="${label%%\"*}"                                       # ... and next '"' (TODO: can fs labels contain '"'? -> would be problematic!)
+        label="${label%%\"*}"                                       # ... and next '"' (TODO: can fs labels contain double quotes? -> would be problematic!)
 
         dmsrc="$(basename -- "${device}")"
         dmdst="${DMDEV_NAME/"%s"/"${label}"}"
